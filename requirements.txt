@@ -1,0 +1,15 @@
+google-api-python-client
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+openai-whisper
+sentence-transformers
+faiss-cpu
+transformers
+langchain-openai
+fastapi
+uvicorn
+openai
+pymongo
+python-dotenv

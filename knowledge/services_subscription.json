@@ -1,0 +1,38 @@
+[
+  {
+    "id": "sub_001",
+    "category": "services_subscription",
+    "question": "What is the monthly car wash subscription plan?",
+    "answer": "Our Monthly Car Wash Subscription starts from ₹1299. It includes regular doorstep clean and wash service multiple times per month. Best value for customers who want their car clean consistently."
+  },
+  {
+    "id": "sub_002",
+    "category": "services_subscription",
+    "question": "What is the yearly car wash package?",
+    "answer": "Our Yearly Car Wash Package starts from ₹9999. It provides monthly clean and wash service throughout the entire year (12 months). Best value for money compared to one-time or monthly plans."
+  },
+  {
+    "id": "sub_003",
+    "category": "services_subscription",
+    "question": "How many washes do I get in monthly subscription?",
+    "answer": "The monthly subscription includes regular scheduled washes throughout the month. Exact frequency depends on the plan tier. Contact us at +91 70048 10369 to know the exact wash count for your city."
+  },
+  {
+    "id": "sub_004",
+    "category": "services_subscription",
+    "question": "Can I cancel my monthly subscription?",
+    "answer": "Yes, you can cancel your monthly subscription. Please contact our support at +91 70048 10369 or email info@mrwhitegloves.com for cancellation requests."
+  },
+  {
+    "id": "sub_005",
+    "category": "services_subscription",
+    "question": "What is the difference between monthly and yearly plan?",
+    "answer": "Monthly plan starts at ₹1299/month - pay monthly, cancel anytime. Yearly plan starts at ₹9999 - pay once for 12 months, saves more money overall. Yearly plan gives best per-wash value."
+  },
+  {
+    "id": "sub_006",
+    "category": "services_subscription",
+    "question": "How do I subscribe to monthly car wash plan?",
+    "answer": "To subscribe to our monthly or yearly car wash plan, visit www.mrwhitegloves.com or call us at +91 70048 10369. Our team will set up your subscription and schedule your first wash."
+  }
+]

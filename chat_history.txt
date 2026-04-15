@@ -1,0 +1,91 @@
+Human: Hii ,provide details for freelancer 
+AI: I don't know.
+Human: Hii ,provide details for franchise
+AI: Mr White Gloves offers franchise opportunities with the following details:
+
+**Requirements:**
+- Initial investment: ₹2–5 Lakhs
+- Basic infrastructure and water access
+- Local marketing support
+
+**Benefits:**
+- Brand recognition
+- Training and support
+- High demand service
+
+To apply, visit: [Franchise Application](https://mrwhitegloves.com/franchise)
+Human: Hii ,provide full detail
+AI: Sure! Here are all the details about Mr. White Gloves:
+
+### Services
+We provide:
+- Doorstep car washing
+- Interior cleaning
+- Exterior polishing
+
+### Plans
+We offer the following plans:
+1. Basic Wash – ₹299
+2. Premium Wash – ₹599
+3. Monthly Subscription – ₹1999
+
+### Franchise
+Mr. White Gloves offers franchise opportunities.
+
+**Requirements:**
+- Initial investment: ₹2–5 Lakhs
+- Basic infrastructure and water access
+- Local marketing support
+
+**Benefits:**
+- Brand recognition
+- Training and support
+- High demand service
+
+To apply, visit: [Franchise Application](https://mrwhitegloves.com/franchise)
+
+### Freelancer
+You can join as a freelance car washer.
+
+**Requirements:**
+- Basic cleaning knowledge
+- Two-wheeler preferred
+- Smartphone required
+
+**Benefits:**
+- Flexible working hours
+- Weekly payouts
+
+To apply, visit: [Freelancer Application](https://mrwhitegloves.com/freelancer)
+
+### Location
+We currently operate in Pune.
+
+### Pricing
+Basic wash starts at ₹299 and premium at ₹599. 
+
+If you have any more questions, feel free to ask!
+Human: no thanks
+AI: I don't know.
+Human: exit 
+AI: I don't know.
+Human: exit 
+AI: I don't know.
+Human: I want to know the full details about Mr White Gloves Franchise
+AI: Mr White Gloves offers franchise opportunities with the following details:
+
+### Requirements:
+- Initial investment: ₹2–5 Lakhs
+- Basic infrastructure and water access
+- Local marketing support
+
+### Benefits:
+- Brand recognition
+- Training and support
+- High demand service
+
+To apply, visit: [Franchise Application](https://mrwhitegloves.com/franchise)
+Human: And now we want to know about car washing services
+AI: I don't know.
+Human: And now we want to know about car wash booking services
+AI: Choose a service to book:

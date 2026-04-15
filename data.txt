@@ -1,0 +1,19 @@
+KNOWLEDGE_BASE = {
+    "plans": """
+We offer the following plans:
+1. Basic Wash – ₹299
+2. Premium Wash – ₹599
+3. Monthly Subscription – ₹1999
+""",
+
+    "services": """
+We provide:
+- Doorstep car washing
+- Interior cleaning
+- Exterior polishing
+""",
+
+    "location": "We currently operate in Pune.",
+
+    "pricing": "Basic wash starts at ₹299 and premium at ₹599."
+}

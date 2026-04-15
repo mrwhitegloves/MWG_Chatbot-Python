@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ot_001",
+    "category": "services_onetime",
+    "question": "What is Foam Wash and Vacuum Clean service?",
+    "answer": "Foam Wash & Vacuum Clean is our basic one-time service starting at ₹299. It includes exterior foam wash using eco-friendly chemicals and interior vacuum cleaning. Best for regular maintenance."
+  },
+  {
+    "id": "ot_002",
+    "category": "services_onetime",
+    "question": "What is included in Wash and Polish service?",
+    "answer": "Wash + Interior/Exterior Polish starts from ₹699. It includes full exterior foam wash plus interior and exterior machine polishing for a premium shine and finish."
+  },
+  {
+    "id": "ot_003",
+    "category": "services_onetime",
+    "question": "What is Deep Cleaning and Detailing?",
+    "answer": "Deep Cleaning & Detailing starts from ₹2499. It is our most thorough one-time service including deep interior seat cleaning, dashboard cleaning, exterior detailing, foam wash, and premium finishing. Best for cars needing thorough restoration."
+  },
+  {
+    "id": "ot_004",
+    "category": "services_onetime",
+    "question": "What are the one time wash service prices?",
+    "answer": "Our one-time car wash packages: (1) Foam Wash & Vacuum Clean - starts ₹299. (2) Wash + Interior/Exterior Polish - starts ₹699. (3) Deep Cleaning & Detailing - starts ₹2499. All services are done at your doorstep."
+  },
+  {
+    "id": "ot_005",
+    "category": "services_onetime",
+    "question": "How long does a one time car wash take?",
+    "answer": "Foam Wash takes 30-45 minutes. Wash + Polish takes 60-90 minutes. Deep Cleaning & Detailing takes 2-4 hours depending on car condition."
+  },
+  {
+    "id": "ot_006",
+    "category": "services_onetime",
+    "question": "Is the car wash done at my home or do I need to go somewhere?",
+    "answer": "All Mr. White Gloves services are 100% doorstep. Our trained staff comes to your home, office, or any location with all equipment. You do not need to go anywhere."
+  }
+]
