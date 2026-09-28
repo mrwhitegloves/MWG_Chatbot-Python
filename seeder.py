@@ -1,4 +1,4 @@
-# python-service/seeder.py
+# mwg_chatbot_python_service/seeder.py
 # Run once: python seeder.py
 # Re-run whenever you update any knowledge JSON file
 
@@ -25,6 +25,8 @@ FILES = [
     "byob_modal.json",
     "area_partner_modal.json",
     "faqs.json",
+    "bda_job.json",
+    "field_sales_job.json",
 ]
 
 def get_embeddings_batch(texts: list[str]) -> list:

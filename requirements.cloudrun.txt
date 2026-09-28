@@ -1,0 +1,8 @@
+# Minimal dependencies for the production RAG service (main.py + seed_knowledge.py).
+# requirements.txt keeps the heavier packages used by the older local experiments.
+fastapi==0.135.3
+uvicorn==0.43.0
+openai==2.30.0
+pymongo==4.16.0
+python-dotenv==1.0.0
+pydantic==2.12.5

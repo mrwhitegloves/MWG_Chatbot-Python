@@ -1,0 +1,17 @@
+.gcloudignore
+.git/
+.gitignore
+.env
+.dummy_env
+mrwgenv/
+__pycache__/
+faiss_index/
+knowledge/
+*.log
+chat_history.txt
+data.txt
+franchise.txt
+demo.py
+Inhanced_code.py
+seeder.py
+requirements.txt

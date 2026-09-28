@@ -1,0 +1,10 @@
+.env
+.dummy_env
+mrwgenv/
+__pycache__/
+faiss_index/
+knowledge/
+*.log
+*.txt
+!requirements.cloudrun.txt
+.git/

@@ -1,11 +1,22 @@
-# python-service/main.py
-# Enhanced demo.py → Production FastAPI RAG Service
-# Uses MongoDB Atlas Vector Search instead of FAISS + .txt files
+# mwg_chatbot_python_service/main.py
+# MWG AI WhatsApp Sales Agent — Python RAG Service
+# Updated: Chapter 04 — Production AI Sales Agent
+#
+# Changes from original:
+#   - BYOB model REMOVED (discontinued by MWG)
+#   - 3 franchise plans added: Solo Partner / Growth Partner / Master Franchise
+#   - Structured JSON output for all responses (Node.js reads this)
+#   - Full MWG sales agent system prompt (human-like, not chatbot-like)
+#   - Lead profile extraction from conversation
+#   - Lead scoring guidance for LLM
+#   - Human handoff detection
+#   - Area Partner at ₹15,000 + GST added
 
 import os
+import json
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from openai import OpenAI
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -13,12 +24,12 @@ import time
 
 load_dotenv()
 
-app    = FastAPI()
+app = FastAPI()
 
 # ─── Clients ──────────────────────────────────────────────────────────────────
 openai_client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
-    base_url="https://openrouter.ai/api/v1",  # keeping your OpenRouter setup
+    base_url="https://openrouter.ai/api/v1",
 )
 
 mongo_client = MongoClient(os.getenv("MONGODB_URI"))
@@ -34,15 +45,178 @@ class ChatMessage(BaseModel):
     content: str
 
 class ChatRequest(BaseModel):
-    message:      str
-    phone:        str
-    chat_history: Optional[List[ChatMessage]] = []
+    message:          str
+    phone:            str
+    chat_history:     Optional[List[ChatMessage]] = []
+    # New fields for AI Sales Agent (Chapter 04+)
+    lead_profile:     Optional[Dict[str, Any]]    = None   # AI-extracted profile from AdsLead
+    conversation_summary: Optional[str]           = None   # Compressed conversation summary
+    current_intent:   Optional[str]               = None   # Last known intent
+    ai_sales_stage:   Optional[str]               = None   # Current funnel stage
+    # Live car/bike service prices + active coupons, built by backend2
+    # from the app's `services` / `coupons` collections on every request
+    live_catalog:     Optional[str]               = None
+    # Verified location / vehicle / availability for car-service leads
+    # (backend2 only calls us for those once location + vehicle are known)
+    service_context:  Optional[str]               = None
 
 class ChatResponse(BaseModel):
-    reply:   str
-    intent:  str
-    type:    str
-    options: Optional[list] = None
+    reply:             str
+    intent:            str
+    type:              str
+    options:           Optional[list]    = None
+    # Structured AI Sales Agent output (new)
+    confidence:        Optional[float]   = None
+    salesStage:        Optional[str]     = None
+    leadScore:         Optional[int]     = None
+    scoreReason:       Optional[str]     = None
+    leadStatus:        Optional[str]     = None
+    requiresHuman:     Optional[bool]    = None
+    followUpRequired:  Optional[bool]    = None
+    extractedProfile:  Optional[dict]   = None
+    aiComment:         Optional[str]    = None
+
+
+# ─── MWG Business Rules (Hard-coded) ──────────────────────────────────────────
+MWG_FRANCHISE_PLANS = """
+FRANCHISE PLANS (3 Plans — All prices EXCLUDE 18% GST):
+
+1. SOLO PARTNER — ₹99,000 + GST (~₹1,16,820 total)
+   • 1 Kit (1 washer), 1 Technician
+   • Coverage: 1 Zone/Area
+   • Daily capacity: 8-12 cars/day
+   • Break-even: 3-6 months
+   • Commission: 38% on every service
+   • Sub-franchise rights: NO
+   • Best for: First-timers, Homemakers, Retired professionals
+
+2. GROWTH PARTNER — ₹1,85,000 + GST (~₹2,18,300 total) ⭐ MOST POPULAR
+   • 2 Kits (2 washers), 2-3 Technicians
+   • Coverage: 2-3 Zones
+   • Daily capacity: 20-30 cars/day
+   • Break-even: 4-8 months
+   • Commission: 38% on every service
+   • Sub-franchise rights: NO
+   • Best for: Small business owners, Ex-corporate, Side-hustle builders
+
+3. MASTER FRANCHISE — ₹5,00,000 + GST (~₹5,90,000 total)
+   • 4 Kits, 5-8 Technicians
+   • Coverage: Entire City/District
+   • Daily capacity: 50-80 cars/day
+   • Break-even: 6-12 months
+   • Commission: 38% on every service
+   • Sub-franchise rights: YES (can appoint sub-partners)
+   • Best for: Investors, City exclusivity seekers
+
+COMMON ACROSS ALL PLANS:
+• 38% commission on every service completed
+• 5-day training included
+• 25+ premium items in kit (equipment, chemicals, tools, branding)
+• Full support: leads, branding, training & more
+• Scalable: start small, grow big
+"""
+
+MWG_AREA_PARTNER = """
+AREA PARTNER MODEL — ₹15,000 + 18% GST
+• Local area/society-level partner
+• Different from franchise (smaller scale, single locality)
+• Full details on interest
+"""
+
+MWG_REMOVED_MODELS = """
+IMPORTANT: BYOB (Be Your Own Boss) model has been DISCONTINUED.
+DO NOT mention BYOB. If asked, politely say it is no longer available and offer franchise info.
+"""
+
+MWG_AI_SALES_AGENT_SYSTEM_PROMPT = f"""You are Arjun, a senior sales consultant at Mr. White Gloves (MWG).
+MWG is India's premium doorstep super car care franchise.
+
+PERSONALITY:
+- Warm, professional, knowledgeable
+- Sound like a human sales expert, NOT a robot or chatbot
+- Use natural conversational Hindi-English mix (Hinglish) matching the customer's style
+- Short replies on WhatsApp (max 3-4 sentences per message unless explaining plans)
+- Never reveal you are an AI — you are Arjun from MWG
+
+YOUR GOAL:
+- Understand what the customer wants (franchise? service? job?)
+- Qualify them (budget, location, timeline, decision-maker?)
+- Guide them toward a booking/enrollment
+- Score their intent and update their profile
+
+=== MWG FRANCHISE INFORMATION ===
+{MWG_FRANCHISE_PLANS}
+
+=== AREA PARTNER ===
+{MWG_AREA_PARTNER}
+
+{MWG_REMOVED_MODELS}
+
+=== CAR & BIKE DOORSTEP WASH SERVICES (LIVE FROM MWG APP — CURRENT PRICES) ===
+<<LIVE_CATALOG>>
+
+=== SALES RULES — MUST FOLLOW ===
+1. NEVER promise guaranteed ROI or specific monthly revenue
+2. Discounts: you may share ONLY the offers/coupon codes listed under ACTIVE OFFERS above, with their conditions. NEVER invent any other discount — for other discount requests say "main check karke batata hoon"
+3. NEVER confirm city availability without checking (say "aapke city mein availability check karte hain")
+4. If customer asks about BYOB → say it's discontinued, offer franchise plans instead
+5. Sub-franchise rights → only available in Master Franchise plan
+6. Car/bike service prices: quote ONLY from the LIVE price list above. Ask the vehicle type (Hatchback / Sedan / SUV / Bike) to give the exact price. If a service is not in the list, say it is not available right now. IGNORE any different service prices in the KNOWLEDGE BASE — they are outdated.
+7. For booking a car/bike service → MWG app (search "Mr White Gloves" on Google Play / App Store), website https://mrwhitegloves.com, or call +91 94296 91299. Our contact number is ONLY +91 94296 91299.
+8. Always use ₹ for prices, not Rs or INR
+9. If you don't know something → "main abhi check karke confirm karta hoon"
+10. If the customer asks a price without naming a specific package (e.g. "wash kitne ka hai", "full wash"), list the relevant packages for THEIR vehicle (name + price, one line each) and ask which one they want — don't pick one for them.
+11. Coupons: for a given service price, suggest ONLY the code shown in [square brackets] next to that price in the live list, with that final price (e.g. "₹499 → ₹349 with code MWG150"). If a price has no [bracket], no coupon applies to it. Never pick a code on your own, even if an earlier message in this chat did. NEVER copy the square brackets into your reply — write it naturally, e.g. "₹249 (code MWG150 lagane pe sirf ₹99)". Mention offers only when the customer asks about price/offers or is about to book.
+12. Car/bike service customers: their location and vehicle are checked by our system BEFORE you are asked to reply. If "CAR SERVICE CUSTOMER CONTEXT" is given, trust it — quote only that vehicle type's prices and never ask for location/vehicle again. Never promise service availability for a location yourself.
+13. You CANNOT create or confirm bookings. When a customer wants to book, send them the booking options (MWG app / https://mrwhitegloves.com / call +91 94296 91299) and mention the coupon if one applies. Never collect name, date or time for a booking and never say "main booking confirm kar dunga".
+14. Franchise / Area Partner leads: ask for their city (and pincode) naturally while qualifying them. Never ask them about their vehicle.
+
+=== HUMAN HANDOFF — WHEN TO ESCALATE ===
+Set requiresHuman=true if ANY of:
+- Customer explicitly asks for human/manager/call
+- Payment dispute, refund, or legal complaint
+- Very angry or abusive customer
+- Customer wants a specific discount/deal
+- Complex technical question about operations
+- You have answered 5+ messages and customer is still undecided
+- AI confidence < 0.4
+
+=== LEAD SCORING GUIDE ===
+Score 0-100 based on these factors:
+- Intent clarity: franchise/area_partner = 20pts max | car_service = 15pts | unclear = 5pts
+- Budget readiness: matches plan = 20pts | mentions budget = 12pts | no budget = 5pts
+- Timeline urgency: "this month/ASAP" = 15pts | "3 months" = 10pts | "someday" = 5pts
+- Engagement: 5+ meaningful replies = 15pts | 3-5 = 10pts | 1-2 = 5pts | none = 0pts
+- Location: city confirmed + MWG available = 10pts | city mentioned = 5pts | none = 0pts
+- Decision maker: confirmed = 10pts | "will discuss" = 5pts | unclear = 3pts
+
+=== OUTPUT FORMAT — CRITICAL ===
+You MUST respond with a valid JSON object ONLY. No markdown, no code blocks. Example:
+{{
+  "reply": "your message to send on WhatsApp",
+  "intent": "franchise",
+  "confidence": 0.85,
+  "salesStage": "consideration",
+  "leadScore": 65,
+  "scoreReason": "Strong franchise interest, budget mentioned, location ready",
+  "leadStatus": "engaged",
+  "requiresHuman": false,
+  "followUpRequired": true,
+  "extractedProfile": {{
+    "location": "Mumbai",
+    "budget": "₹2 lakh",
+    "preferred_plan": "Growth Partner",
+    "timeline": "1 month",
+    "occupation": "IT professional"
+  }},
+  "aiComment": "Admin note: Lead very interested in Growth Partner. Budget matches. Recommend phone call."
+}}
+
+extractedProfile: include ONLY facts the customer explicitly said in this chat — never guess. Set "decision_maker" only if the customer clearly said whether they decide themselves.
+salesStage must be one of: awareness | interest | consideration | intent | evaluation | decision | closed
+leadStatus must be one of: new | contacted | engaged | qualified | high_intent | negotiation | call_required | follow_up | converted | not_interested | lost | human_handoff
+intent must be one of: franchise | area_partner | car_service | subscription | job | pricing | booking | complaint | general_faq | negotiation | human_handoff | byob_inquiry | unknown
+"""
 
 
 # ─── Embedding (OpenRouter) ───────────────────────────────────────────────────
@@ -78,28 +252,25 @@ def _run_vector_search(query_vector: list, top_k: int, category: str = None) -> 
     return list(collection.aggregate(pipeline))
 
 
-def retrieve_context(query: str, top_k: int = 6, category: str = None) -> list[dict]:
-    """Retrieve relevant knowledge chunks with category-aware fallback.
+# Old pre-Chapter-10 categories (BYOB, priced service chunks). seed_knowledge.py
+# removes them; this guard only matters if an old backup is ever restored.
+STALE_CATEGORIES = {"byob", "services_onetime", "services_subscription", "faq", "job_bda", "job_fse"}
 
-    Strategy:
-        1. Search with the specific category filter (precise).
-        2. If that returns < 2 results, retry WITHOUT the filter (broad recall).
-        3. De-duplicate by text and return top_k results.
-    """
+
+def retrieve_context(query: str, top_k: int = 6, category: str = None) -> list[dict]:
+    """Retrieve relevant knowledge chunks with category-aware fallback."""
     query_vector = get_embedding(query)
 
-    # Primary search (category-filtered if available)
-    chunks = _run_vector_search(query_vector, top_k, category)
+    chunks = [c for c in _run_vector_search(query_vector, top_k, category)
+              if c.get("category") not in STALE_CATEGORIES]
     print(f"   🔍 Primary search [{category}]: {len(chunks)} chunk(s)")
 
-    # Fallback: broaden to all categories when primary returns too few results
     if len(chunks) < 2 and category:
         broad_chunks = _run_vector_search(query_vector, top_k, category=None)
         print(f"   🔄 Fallback broad search: {len(broad_chunks)} chunk(s)")
-        # Merge: primary hits first, then unique broad hits
         seen = {c["text"] for c in chunks}
         for c in broad_chunks:
-            if c["text"] not in seen:
+            if c["text"] not in seen and c.get("category") not in STALE_CATEGORIES:
                 chunks.append(c)
                 seen.add(c["text"])
         chunks = chunks[:top_k]
@@ -107,63 +278,67 @@ def retrieve_context(query: str, top_k: int = 6, category: str = None) -> list[d
     return chunks
 
 
-# ─── Intent Detection (your existing logic, enhanced) ─────────────────────────
+# ─── Intent Detection ─────────────────────────────────────────────────────────
+# BYOB keywords retained ONLY to detect when customer mentions it
+# so we can redirect them to franchise info
 INTENT_KEYWORDS = {
     "booking": [
         "book", "schedule", "reserve", "appointment", "slot",
         "wash now", "set up", "arrange", "order",
-        # Hindi / transliterated
         "chahiye", "karwana", "karwa do", "lagao", "karna hai",
     ],
-    "byob": [
+    "byob_inquiry": [
         "byob", "be your own boss", "boss bano", "khud ka boss",
-        "own boss", "backpack kit", "gig worker", "24999", "24,999",
+        "own boss", "backpack kit", "24999", "24,999",
         "be your own", "apna boss",
     ],
     "area_partner": [
         "area partner", "area partner kaise", "partner kaise bane",
         "kaise bane", "local partner", "society partner",
         "residential partner", "subscribe area", "apna area",
-        "society subscription", "3000", "5000", "3,000", "5,000",
+        "society subscription", "15000", "15,000",
         "join as partner", "area me kaam",
     ],
     "franchise": [
         "franchise", "franchisey", "start business", "invest", "roi",
         "franchise kya hai", "franchise price", "franchise cost",
-        "kitna lagta", "business kaise", "kitna invest", "1,90,000",
-        "190000", "1.9 lakh", "2 lakh", "revenue", "profit per month",
+        "kitna lagta", "business kaise", "kitna invest",
+        "99000", "99,000", "185000", "1,85,000", "500000", "5,00,000",
+        "solo partner", "growth partner", "master franchise",
+        "1.9 lakh", "2 lakh", "revenue", "profit per month",
     ],
-    "freelancer": [
-        "freelancer", "job", "earn", "joining", "apply",
-        "kamai", "rojgar", "work from home",
+    "job": [
+        "job", "earn", "joining", "apply", "naukri",
+        "kamai", "rojgar", "work from home", "bda", "sales job",
     ],
     "subscription": [
         "monthly", "subscription", "membership", "yearly", "annual",
-        "subscribe", "plan", "package", "mahina", "saal", "9999", "1299",
+        "subscribe", "plan", "package", "mahina", "saal",
     ],
-    "prediction": [
-        "brake", "tyre", "tire", "battery", "oil", "filter",
-        "replace", "fail", "problem", "noise", "worn",
-        "check", "spark", "when should", "predict",
+    "car_service": [
+        "wash", "clean", "polish", "detailing", "foam",
+        "gaadi saaf", "car clean", "car wash",
     ],
 }
 
 def detect_intent_llm(query: str) -> str:
-    """LLM fallback for intent detection — knows all valid MWG intent categories"""
-    prompt = f"""You are an intent classifier for a Mr. White Gloves (doorstep car wash) WhatsApp chatbot.
-Classify the following customer query into exactly ONE of these intents:
-- booking       : customer wants to book a car wash service
-- byob          : about BYOB (Be Your Own Boss) model, gig worker kit, 24999 investment
-- area_partner  : about becoming an area partner, local subscription business, society-level partner
-- franchise     : about MWG franchise, 1.9L investment, starting a team-based business
-- freelancer    : about freelance work, job, earning opportunity (not franchise/byob/area_partner)
-- subscription  : about monthly/yearly car wash plans and packages
-- faq           : general questions about services, safety, eco-friendly, cities available, contact
-- prediction    : car maintenance prediction, part replacement, mechanical queries
-- general       : anything else not covered above
+    """LLM fallback for intent detection — updated for new MWG model."""
+    prompt = f"""You are an intent classifier for Mr. White Gloves (MWG) WhatsApp sales chatbot.
+Classify this customer message into exactly ONE intent:
 
-Query: {query}
-Answer ONLY one word (the intent name)."""
+- franchise     : about MWG franchise investment (Solo Partner/Growth Partner/Master Franchise)
+- area_partner  : about becoming an area/local/society partner (₹15,000)
+- car_service   : wants car wash, cleaning, polish service
+- subscription  : monthly/yearly car wash plan
+- job           : looking for job/work opportunity at MWG
+- booking       : wants to book a service RIGHT NOW
+- complaint     : unhappy, complaint, problem with service
+- byob_inquiry  : mentions BYOB (discontinued model — redirect to franchise)
+- general_faq   : general questions about MWG, how it works, cities, contact
+- unknown       : completely unrelated or unclear
+
+Customer message: {query}
+Reply with ONLY the intent word."""
     try:
         result = openai_client.chat.completions.create(
             model="openai/gpt-4o-mini",
@@ -173,14 +348,14 @@ Answer ONLY one word (the intent name)."""
         )
         intent = result.choices[0].message.content.strip().lower()
         valid_intents = {
-            "booking", "byob", "area_partner", "franchise",
-            "freelancer", "subscription", "faq", "prediction", "general"
+            "franchise", "area_partner", "car_service", "subscription",
+            "job", "booking", "complaint", "byob_inquiry", "general_faq", "unknown"
         }
-        if intent in valid_intents:
-            return intent
+        return intent if intent in valid_intents else "unknown"
     except Exception as e:
         print(f"Intent LLM error: {e}")
-    return "general"
+    return "unknown"
+
 
 def detect_intent(query: str) -> str:
     q = query.lower()
@@ -190,126 +365,187 @@ def detect_intent(query: str) -> str:
     return detect_intent_llm(query)
 
 
-# ─── Category Map: intent → MongoDB category filter ───────────────────────────
-# None = search across ALL categories (broader recall)
+# ─── Category Map: intent → MongoDB category filter ──────────────────────────
 INTENT_CATEGORY = {
-    "byob":         "byob",
-    "area_partner": "area_partner",
+    # Categories as seeded by seed_knowledge.py (knowledge_data.py)
     "franchise":    "franchise",
-    "freelancer":   "area_partner",
-    "subscription": "services_subscription",
-    "prediction":   None,
-    "faq":          None,
-    "general":      None,
+    "byob_inquiry": "franchise",   # "BYOB discontinued" chunk lives in franchise
+    "area_partner": "area_partner",
+    "job":          "job",
+    # Service prices come from live_catalog; the KB has only non-price service FAQs
+    "subscription": "services",
+    "car_service":  "services",
+    "booking":      "services",
+    "complaint":    "services",
+    "general_faq":  "general_faq",
+    "unknown":      None,
 }
 
 
-# ─── LLM Reply Generator ──────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are a helpful and knowledgeable WhatsApp assistant for Mr. White Gloves (MWG), a premium doorstep car wash company in India.
-
-Your job:
-- Answer customer questions about MWG services, pricing, BYOB model, Area Partner model, and Franchise model.
-- Use the provided CONTEXT to answer. The context contains the most relevant knowledge.
-- If the context covers the question, give a clear, complete, friendly answer.
-- You may combine multiple context snippets to give a full answer.
-- If the context is partially relevant, use what is available and answer as best you can.
-- Keep replies SHORT and conversational — this is WhatsApp. Use bullet points when listing items.
-- Always use ₹ symbol for all Indian Rupee prices.
-- Respond in the same language as the user (Hindi/English mix is fine).
-- Only if the context has ZERO relevant information about the topic, say: "I don't have that info. Please call +91 70048 10369."
-- NEVER invent prices, features, or facts not present in the context.
-"""
-
-def generate_reply(
+# ─── AI Sales Agent Reply Generator ──────────────────────────────────────────
+def generate_sales_reply(
     user_message: str,
     context_chunks: list[dict],
-    chat_history: List[ChatMessage]
-) -> str:
-    context_text = "\n\n".join(c["text"] for c in context_chunks)
+    chat_history: List[ChatMessage],
+    lead_profile: Optional[dict] = None,
+    conversation_summary: Optional[str] = None,
+    current_intent: Optional[str] = None,
+    ai_sales_stage: Optional[str] = None,
+    live_catalog: Optional[str] = None,
+    service_context: Optional[str] = None,
+) -> dict:
+    """Generate structured AI sales reply with lead intelligence extraction."""
 
-    # Build messages: history + new message with context
+    system_prompt = MWG_AI_SALES_AGENT_SYSTEM_PROMPT.replace(
+        "<<LIVE_CATALOG>>",
+        live_catalog.strip() if live_catalog and live_catalog.strip() else
+        "Price list temporarily unavailable. Do NOT quote any car/bike service price — "
+        "ask the customer to check the MWG app or call +91 94296 91299."
+    )
+
+    context_text = "\n\n".join(c["text"] for c in context_chunks) if context_chunks else ""
+
+    # Build dynamic context for this specific lead
+    lead_context_parts = []
+    if conversation_summary:
+        lead_context_parts.append(f"CONVERSATION SUMMARY SO FAR:\n{conversation_summary}")
+    if lead_profile and any(lead_profile.values()):
+        profile_str = "\n".join(f"  {k}: {v}" for k, v in lead_profile.items() if v)
+        lead_context_parts.append(f"KNOWN LEAD PROFILE:\n{profile_str}")
+    if current_intent:
+        lead_context_parts.append(f"CURRENT KNOWN INTENT: {current_intent}")
+    if ai_sales_stage:
+        lead_context_parts.append(f"CURRENT SALES STAGE: {ai_sales_stage}")
+    if service_context:
+        lead_context_parts.append(f"CAR SERVICE CUSTOMER CONTEXT (verified by system):\n{service_context}")
+
+    lead_context = "\n\n".join(lead_context_parts)
+
+    # Build message thread (last 6 messages = last 3 turns)
     messages = []
-    for msg in chat_history[-6:]:  # last 3 turns
+    for msg in chat_history[-6:]:
         role = "user" if msg.role == "human" else "assistant"
         messages.append({ "role": role, "content": msg.content })
 
+    # Compose final user message with all context
+    user_content_parts = []
+    if lead_context:
+        user_content_parts.append(f"=== LEAD CONTEXT ===\n{lead_context}")
+    if context_text:
+        user_content_parts.append(f"=== KNOWLEDGE BASE ===\n{context_text}")
+    user_content_parts.append(f"=== CUSTOMER MESSAGE ===\n{user_message}")
+
     messages.append({
         "role":    "user",
-        "content": f"Context:\n{context_text}\n\nQuestion: {user_message}"
+        "content": "\n\n".join(user_content_parts)
     })
 
-    response = openai_client.chat.completions.create(
-        model="openai/gpt-4o-mini",
-        messages=[
-            { "role": "system", "content": SYSTEM_PROMPT },
-            *messages
-        ],
-        temperature=0.3,
-        max_tokens=300,
-    )
-    return response.choices[0].message.content
+    try:
+        response = openai_client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=[
+                { "role": "system", "content": system_prompt },
+                *messages
+            ],
+            temperature=0.4,
+            max_tokens=600,
+            response_format={ "type": "json_object" },
+        )
 
+        raw = response.choices[0].message.content.strip()
+        result = json.loads(raw)
+        return result
 
-# ─── Booking Response ──────────────────────────────────────────────────────────
-def booking_response() -> dict:
-    return {
-        "type":    "booking",
-        "intent":  "booking",
-        "reply":   "Choose a service to book:",
-        "options": [
-            { "name": "Foam Wash & Vacuum Clean",  "price": "₹299",  "link": "https://mrwhitegloves.com/basic" },
-            { "name": "Wash + Int/Ext Polish",     "price": "₹699",  "link": "https://mrwhitegloves.com/polish" },
-            { "name": "Deep Cleaning & Detailing", "price": "₹2499", "link": "https://mrwhitegloves.com/detailing" },
-            { "name": "Monthly Subscription",      "price": "₹1299", "link": "https://mrwhitegloves.com/monthly" },
-            { "name": "Yearly Package",            "price": "₹9999", "link": "https://mrwhitegloves.com/yearly" },
-        ]
-    }
+    except json.JSONDecodeError as e:
+        print(f"JSON parse error: {e} | raw: {raw[:200]}")
+        # Fallback: return safe default
+        return {
+            "reply": "Ek second, main check karke confirm karta hoon. Franchise ke baare mein interest hai aapka?",
+            "intent": current_intent or "unknown",
+            "confidence": 0.3,
+            "salesStage": ai_sales_stage or "awareness",
+            "leadScore": None,
+            "scoreReason": None,
+            "leadStatus": "engaged",
+            "requiresHuman": False,
+            "followUpRequired": True,
+            "extractedProfile": {},
+            "aiComment": None
+        }
+    except Exception as e:
+        print(f"LLM error: {e}")
+        return {
+            "reply": "Sorry, ek technical issue aa gaya. Please call +91 94296 91299.",
+            "intent": "unknown",
+            "confidence": 0.0,
+            "salesStage": None,
+            "leadScore": None,
+            "scoreReason": None,
+            "leadStatus": "engaged",
+            "requiresHuman": True,
+            "followUpRequired": False,
+            "extractedProfile": {},
+            "aiComment": "LLM error — human intervention needed"
+        }
 
 
 # ─── Main Chat Endpoint ────────────────────────────────────────────────────────
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
 
-    # Input validation (keeping your existing checks)
     msg = req.message.strip()
     if not msg or len(msg) < 2:
-        return ChatResponse(reply="Please send a valid message.",
-                            intent="general", type="fallback")
-    if len(msg) > 500:
-        return ChatResponse(reply="Please keep your message under 500 characters.",
-                            intent="general", type="fallback")
+        return ChatResponse(reply="Please send a valid message.", intent="unknown", type="fallback")
+    if len(msg) > 1000:
+        msg = msg[:1000]
 
     intent = detect_intent(msg)
-    print(f"📌 [{req.phone}] intent: {intent} | msg: {msg}")
+    print(f"📌 [{req.phone}] intent: {intent} | msg: {msg[:80]}")
 
-    # Booking → no RAG needed
-    if intent == "booking":
-        result = booking_response()
-        return ChatResponse(**result)
-
-    # All others → Atlas Vector Search
-    category = INTENT_CATEGORY.get(intent)  # None = search all categories
+    # Atlas Vector Search (booking included — the LLM answers it from
+    # the live price list instead of a hardcoded reply)
+    category = INTENT_CATEGORY.get(intent)
     chunks   = retrieve_context(msg, top_k=6, category=category)
 
-    # Last-resort: if still no chunks found, try a completely open search
     if not chunks:
-        print(f"   ⚠️  No chunks found — trying open search without filters")
-        chunks = retrieve_context(msg, top_k=6, category=None)
+        print(f"   ⚠️  No chunks found — trying open search")
+        chunks = retrieve_context(msg, top_k=4, category=None)
 
-    if not chunks:
-        return ChatResponse(
-            reply="I don't have that info. Please call +91 70048 10369.",
-            intent=intent, type="fallback"
-        )
+    # Generate AI sales reply with full context
+    result = generate_sales_reply(
+        user_message         = msg,
+        context_chunks       = chunks,
+        chat_history         = req.chat_history or [],
+        lead_profile         = req.lead_profile,
+        conversation_summary = req.conversation_summary,
+        current_intent       = req.current_intent,
+        ai_sales_stage       = req.ai_sales_stage,
+        live_catalog         = req.live_catalog,
+        service_context      = req.service_context,
+    )
 
-    reply = generate_reply(msg, chunks, req.chat_history)
-    return ChatResponse(reply=reply, intent=intent, type=intent, options=None)
+    # Ensure all required fields exist
+    return ChatResponse(
+        reply             = result.get("reply", "Main abhi check karke batata hoon."),
+        intent            = result.get("intent", intent),
+        type              = result.get("intent", intent),
+        options           = result.get("options"),
+        confidence        = result.get("confidence"),
+        salesStage        = result.get("salesStage"),
+        leadScore         = result.get("leadScore"),
+        scoreReason       = result.get("scoreReason"),
+        leadStatus        = result.get("leadStatus"),
+        requiresHuman     = result.get("requiresHuman", False),
+        followUpRequired  = result.get("followUpRequired", True),
+        extractedProfile  = result.get("extractedProfile"),
+        aiComment         = result.get("aiComment"),
+    )
 
 
-# ─── Health Check ──────────────────────────────────────────────────────────────
+# ─── Health Check ─────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return { "status": "ok", "service": "MWG Python RAG" }
+    return { "status": "ok", "service": "MWG AI Sales Agent RAG", "version": "2.0" }
 
 
 if __name__ == "__main__":
