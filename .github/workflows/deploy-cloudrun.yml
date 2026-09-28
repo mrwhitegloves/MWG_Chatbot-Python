@@ -1,0 +1,36 @@
+name: Deploy RAG service to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: 'projects/1085558740985/locations/global/workloadIdentityPools/github/providers/github-provider'
+          service_account: 'github-deployer@mr-white-gloves-production.iam.gserviceaccount.com'
+
+      # Env vars (OPENROUTER_API_KEY, MONGODB_URI, MONGODB_DB) are kept from the
+      # existing service. The service stays private — only backend2 may call it.
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: mwg-python-rag-chatbot
+          region: asia-south1
+          source: .
+          flags: '--no-allow-unauthenticated --min-instances=0 --max-instances=2 --memory=512Mi --cpu=1 --timeout=60'
